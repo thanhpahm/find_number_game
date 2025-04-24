@@ -73,10 +73,14 @@ public class Game {
         // Initialize player tracking
         luckyNumberCounts.put(playerId, 0);
 
-        // Check if we have enough players to start
-        if (players.size() >= 2) {
-            // We have at least 2 players, can start the game
-            notifyPlayersOfJoin(client.getUser());
+        // Notify all players (including the new one) about the join
+        notifyPlayersOfJoin(client.getUser());
+
+        // Automatically start the game if enough players have joined and it's not
+        // active
+        if (players.size() >= 2 && !isActive) {
+            System.out.println("Enough players joined. Starting game " + gameId); // Added log
+            startGame();
         }
 
         return true;
@@ -323,6 +327,10 @@ public class Game {
         List<Integer> playerIds = new ArrayList<>(players.keySet());
         dbManager.recordGameResult(winnerId, playerIds, durationSeconds);
 
+        // Get updated leaderboard
+        List<User> updatedLeaderboard = dbManager.getLeaderboard();
+        gameOverMsg.put("leaderboard", updatedLeaderboard); // Add updated leaderboard to the message
+
         // Send game over message to all players
         broadcastToAllPlayers(gameOverMsg);
     }
@@ -358,5 +366,9 @@ public class Game {
 
     public int getGameId() {
         return gameId;
+    }
+
+    public int getMaxPlayers() {
+        return maxPlayers;
     }
 }

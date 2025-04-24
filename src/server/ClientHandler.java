@@ -60,6 +60,9 @@ public class ClientHandler implements Runnable {
             case Message.REGISTER:
                 handleRegister(message);
                 break;
+            case Message.FIND_GAME:
+                handleFindGame();
+                break;
             case Message.START_GAME:
                 if (currentGame != null && !currentGame.isActive() && user != null) {
                     currentGame.startGame();
@@ -92,17 +95,8 @@ public class ClientHandler implements Runnable {
             List<User> leaderboard = server.getDatabaseManager().getLeaderboard();
             response.put("leaderboard", leaderboard);
 
-            // Try to join a game
-            Game game = server.findOrCreateGame();
-            boolean joined = game.addPlayer(this);
-
-            if (joined) {
-                currentGame = game;
-                response.put("gameId", game.getGameId());
-                response.put("waiting", game.getPlayerCount() < 2);
-            } else {
-                response.put("error", "Could not join a game at this time.");
-            }
+            // Remove automatic game joining - players will join only when clicking "Find
+            // Game"
         } else {
             response.put("success", false);
             response.put("error", "Invalid username or password.");
@@ -148,23 +142,50 @@ public class ClientHandler implements Runnable {
             response.put("success", true);
             response.put("user", newUser);
 
-            // Try to join a game
-            Game game = server.findOrCreateGame();
-            boolean joined = game.addPlayer(this);
-
-            if (joined) {
-                currentGame = game;
-                response.put("gameId", game.getGameId());
-                response.put("waiting", game.getPlayerCount() < 2);
-            } else {
-                response.put("error", "Could not join a game at this time.");
-            }
+            // Remove automatic game joining - players will join only when clicking "Find
+            // Game"
         } else {
             response.put("success", false);
             response.put("error", "Username already exists. Please choose another.");
         }
 
         sendMessage(response);
+    }
+
+    private void handleFindGame() throws IOException {
+        if (user == null) {
+            // User must be logged in to find a game
+            System.err.println("FIND_GAME request from non-authenticated user");
+            return;
+        }
+
+        System.out.println("User " + user.getUsername() + " is finding a game...");
+
+        // If the user is already in a game, leave it first
+        if (currentGame != null) {
+            currentGame.removePlayer(user.getId());
+        }
+
+        // Find or create a game
+        Game game = server.findOrCreateGame();
+        boolean joined = game.addPlayer(this);
+
+        if (joined) {
+            currentGame = game;
+            System.out.println("User " + user.getUsername() + " joined game " + game.getGameId() +
+                    " (Current players: " + game.getPlayerCount() + "/" + game.getMaxPlayers() + ")");
+
+            // Server will automatically start the game when enough players join (in
+            // Game.addPlayer)
+            // The client will wait for PLAYER_JOINED or START_GAME messages
+        } else {
+            System.err.println("Could not add user " + user.getUsername() + " to game");
+
+            // Send error message to client
+            Message errorMsg = new Message(Message.ERROR);
+            errorMsg.put("message", "Could not join a game at this time. Please try again.");
+            sendMessage(errorMsg);
+        }
     }
 
     private void handleNumberFound(Message message) throws IOException {

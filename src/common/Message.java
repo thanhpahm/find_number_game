@@ -14,6 +14,7 @@ public class Message implements Serializable {
     public static final String LOGIN = "LOGIN";
     public static final String REGISTER = "REGISTER";
     public static final String LOGIN_RESPONSE = "LOGIN_RESPONSE";
+    public static final String FIND_GAME = "FIND_GAME"; // New message type for finding a game
     public static final String START_GAME = "START_GAME";
     public static final String NUMBER_FOUND = "NUMBER_FOUND";
     public static final String NEXT_NUMBER = "NEXT_NUMBER";

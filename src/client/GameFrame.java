@@ -6,7 +6,6 @@ import common.User;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
-import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -23,7 +22,6 @@ public class GameFrame extends JFrame {
     private final User currentUser;
 
     // Game state
-    private int gameId;
     private int targetNumber;
     private boolean gameActive = false;
     private final Map<Integer, Integer> foundNumbers = new ConcurrentHashMap<>(); // number -> player color
@@ -68,9 +66,37 @@ public class GameFrame extends JFrame {
 
         initializeComponents();
 
+        // Initialize waiting panel state from GameClient
+        int initialCount = client.getInitialPlayerCount();
+        int maxCount = client.getMaxPlayers();
+        if (initialCount > 0 && maxCount > 0) { // Check if we have valid data
+            updateWaitingLabel(initialCount, maxCount);
+            startButton.setEnabled(initialCount >= 2);
+        } else {
+            // Default if no initial data (should ideally not happen if login worked)
+            updateWaitingLabel(0, 0); // Show 0/0 initially
+            startButton.setEnabled(false);
+        }
+
         // Start the block timer to check for unblocked numbers
         blockTimer = new Timer(100, e -> checkBlockedNumbers());
         blockTimer.start();
+    }
+
+    // Helper method to update the waiting label text
+    private void updateWaitingLabel(int current, int max) {
+        JLabel waitingLabel = (JLabel) ((BorderLayout) waitingPanel.getLayout())
+                .getLayoutComponent(BorderLayout.CENTER);
+        if (waitingLabel != null) {
+            if (max > 0) {
+                waitingLabel.setText("Waiting for players... (" + current + "/" + max + ")");
+            } else {
+                // Handle case where max players isn't known yet
+                waitingLabel.setText("Waiting for players...");
+            }
+        }
+        waitingPanel.revalidate();
+        waitingPanel.repaint();
     }
 
     private void initializeComponents() {
@@ -190,11 +216,6 @@ public class GameFrame extends JFrame {
             waitingLabel.setText("Waiting for players... (" + currentPlayers + "/" + maxPlayers + ")");
             waitingPanel.revalidate();
             waitingPanel.repaint();
-
-            // Ensure the first player sees the updated button state
-            if (currentPlayers == 1 && currentUser.getId() == playerId) {
-                startButton.setEnabled(false);
-            }
         });
     }
 
@@ -211,6 +232,7 @@ public class GameFrame extends JFrame {
             cols++; // Adjust if not perfect square
 
         // Process player information
+        @SuppressWarnings("unchecked") // Added to suppress warning for casting message data
         List<Map<String, Object>> playerInfo = (List<Map<String, Object>>) message.get("players");
         for (Map<String, Object> player : playerInfo) {
             int playerId = (int) player.get("id");
@@ -513,6 +535,7 @@ public class GameFrame extends JFrame {
 
         // Get game results
         int winnerId = message.getInt("winnerId");
+        @SuppressWarnings("unchecked") // Added to suppress warning for casting message data
         Map<Integer, Integer> scores = (Map<Integer, Integer>) message.get("scores");
 
         SwingUtilities.invokeLater(() -> {
@@ -520,10 +543,11 @@ public class GameFrame extends JFrame {
             statusLabel.setText("Game Status: Game Over");
 
             // Show game over dialog
-            StringBuilder result = new StringBuilder();
-            result.append("Game Over!\n\n");
-            result.append("Results:\n");
+            StringBuilder result = new StringBuilder(); // Define result here
+            result.append("Game Over!\\n\\n");
+            result.append("Results:\\n");
 
+            // Restore the loop to iterate through players and scores
             for (Map.Entry<Integer, String> player : players.entrySet()) {
                 int playerId = player.getKey();
                 String username = player.getValue();
@@ -533,8 +557,8 @@ public class GameFrame extends JFrame {
                 if (playerId == winnerId) {
                     result.append(" (Winner!)");
                 }
-                result.append("\n");
-            }
+                result.append("\\n");
+            } // End of the restored loop
 
             JOptionPane.showMessageDialog(this, result.toString(), "Game Over", JOptionPane.INFORMATION_MESSAGE);
 
@@ -547,9 +571,5 @@ public class GameFrame extends JFrame {
                 }
             }
         });
-    }
-
-    public void setGameId(int gameId) {
-        this.gameId = gameId;
     }
 }

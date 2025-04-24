@@ -27,6 +27,10 @@ public class GameClient {
     private boolean isConnected = false;
     private ExecutorService messageProcessor;
 
+    // Store game details received on login
+    private int initialPlayerCount = 0;
+    private int maxPlayers = 0;
+
     private LoginFrame loginFrame;
     private LobbyFrame lobbyFrame;
     private GameFrame gameFrame;
@@ -86,6 +90,12 @@ public class GameClient {
         if (success) {
             currentUser = (User) message.get("user");
 
+            // Store initial game state if joined
+            if (message.getData().containsKey("initialPlayerCount")) {
+                initialPlayerCount = message.getInt("initialPlayerCount");
+                maxPlayers = message.getInt("maxPlayers");
+            }
+
             // Close login frame
             if (loginFrame != null) {
                 loginFrame.dispose();
@@ -122,9 +132,13 @@ public class GameClient {
                     }
                     break;
                 case Message.START_GAME:
-                    if (gameFrame != null) {
-                        gameFrame.startGame(message);
+                    // Create the game frame when the START_GAME message is received
+                    gameFrame = new GameFrame(this, currentUser);
+                    if (lobbyFrame != null) {
+                        lobbyFrame.setVisible(false); // Hide lobby frame
                     }
+                    gameFrame.startGame(message);
+                    gameFrame.setVisible(true);
                     break;
                 case Message.NUMBER_FOUND:
                     if (gameFrame != null) {
@@ -148,10 +162,24 @@ public class GameClient {
                     break;
                 case Message.GAME_OVER:
                     if (gameFrame != null) {
+                        // Handle game over in the game frame first (shows results dialog)
                         gameFrame.handleGameOver(message);
 
-                        // Show lobby again after game is over
+                        // Close the game frame
+                        gameFrame.dispose();
+                        gameFrame = null;
+
+                        // Update lobby with latest leaderboard data from the GAME_OVER message
                         if (lobbyFrame != null) {
+                            // Get updated leaderboard from the message
+                            @SuppressWarnings("unchecked")
+                            List<User> updatedLeaderboard = (List<User>) message.get("leaderboard");
+                            if (updatedLeaderboard != null) {
+                                lobbyFrame.updateLeaderboard(updatedLeaderboard);
+                            }
+
+                            // Reset the Find Game button and show the lobby
+                            lobbyFrame.resetFindGameButton();
                             lobbyFrame.setVisible(true);
                         }
                     }
@@ -230,6 +258,15 @@ public class GameClient {
         }
     }
 
+    public void sendFindGame() {
+        try {
+            Message findGameMsg = new Message(Message.FIND_GAME);
+            connection.sendMessage(findGameMsg);
+        } catch (IOException e) {
+            System.err.println("Error sending find game request: " + e.getMessage());
+        }
+    }
+
     public void usePowerup(String powerupType) {
         try {
             Message powerupMsg = new Message(Message.USE_POWERUP);
@@ -265,6 +302,15 @@ public class GameClient {
 
     public User getCurrentUser() {
         return currentUser;
+    }
+
+    // Add getters for the stored game details
+    public int getInitialPlayerCount() {
+        return initialPlayerCount;
+    }
+
+    public int getMaxPlayers() {
+        return maxPlayers;
     }
 
     public static void main(String[] args) {

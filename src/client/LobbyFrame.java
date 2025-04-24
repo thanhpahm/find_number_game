@@ -94,12 +94,10 @@ public class LobbyFrame extends JFrame {
         findGameButton.setEnabled(false);
         findGameButton.setText("Finding game...");
 
-        // Create and show game frame
-        GameFrame gameFrame = new GameFrame(client, currentUser);
-        gameFrame.setVisible(true);
+        // Send FIND_GAME message to server instead of creating GameFrame directly
+        client.sendFindGame();
 
-        // Hide lobby
-        this.setVisible(false);
+        // Game frame will be created by GameClient when server confirms the match
     }
 
     private void showUserInfo() {
@@ -130,6 +128,13 @@ public class LobbyFrame extends JFrame {
                 Object[] row = { user.getUsername(), winRatio, user.getTotalScore() };
                 leaderboardModel.addRow(row);
             }
+        });
+    }
+
+    public void resetFindGameButton() {
+        SwingUtilities.invokeLater(() -> {
+            findGameButton.setEnabled(true);
+            findGameButton.setText("Find Game");
         });
     }
 }
