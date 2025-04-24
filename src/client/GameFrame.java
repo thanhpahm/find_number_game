@@ -190,6 +190,11 @@ public class GameFrame extends JFrame {
             waitingLabel.setText("Waiting for players... (" + currentPlayers + "/" + maxPlayers + ")");
             waitingPanel.revalidate();
             waitingPanel.repaint();
+
+            // Ensure the first player sees the updated button state
+            if (currentPlayers == 1 && currentUser.getId() == playerId) {
+                startButton.setEnabled(false);
+            }
         });
     }
 
