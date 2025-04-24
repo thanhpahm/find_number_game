@@ -98,11 +98,12 @@ public class Game {
         isActive = true;
         startTime = System.currentTimeMillis();
 
-        // Generate the grid (1 to gridSize)
+        // Generate and shuffle the numbers
         List<Integer> numbers = new ArrayList<>(gridSize);
         for (int i = 1; i <= gridSize; i++) {
             numbers.add(i);
         }
+        Collections.shuffle(numbers);
 
         // Pick the first target number
         generateNextTarget();
@@ -113,6 +114,7 @@ public class Game {
         startMessage.put("duration", gameDurationSeconds);
         startMessage.put("targetNumber", targetNumber);
         startMessage.put("players", getPlayerInfo());
+        startMessage.put("shuffledNumbers", numbers); // Send the shuffled numbers to clients
 
         broadcastToAllPlayers(startMessage);
 

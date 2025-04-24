@@ -28,6 +28,7 @@ public class GameClient {
     private ExecutorService messageProcessor;
 
     private LoginFrame loginFrame;
+    private LobbyFrame lobbyFrame;
     private GameFrame gameFrame;
 
     public GameClient() {
@@ -79,6 +80,34 @@ public class GameClient {
         }
     }
 
+    private void handleLoginResponse(Message message) {
+        boolean success = message.getBoolean("success");
+
+        if (success) {
+            currentUser = (User) message.get("user");
+
+            // Close login frame
+            if (loginFrame != null) {
+                loginFrame.dispose();
+            }
+
+            // Create and show the lobby frame
+            lobbyFrame = new LobbyFrame(this, currentUser);
+
+            // Update leaderboard
+            List<User> leaderboard = (List<User>) message.get("leaderboard");
+            lobbyFrame.updateLeaderboard(leaderboard);
+
+            lobbyFrame.setVisible(true);
+        } else {
+            // Show error message
+            String error = message.getString("error");
+            if (loginFrame != null) {
+                loginFrame.showError(error);
+            }
+        }
+    }
+
     private void handleServerMessage(Message message) {
         SwingUtilities.invokeLater(() -> {
             String type = message.getType();
@@ -120,6 +149,11 @@ public class GameClient {
                 case Message.GAME_OVER:
                     if (gameFrame != null) {
                         gameFrame.handleGameOver(message);
+
+                        // Show lobby again after game is over
+                        if (lobbyFrame != null) {
+                            lobbyFrame.setVisible(true);
+                        }
                     }
                     break;
                 case "INCORRECT_NUMBER":
@@ -128,8 +162,9 @@ public class GameClient {
                     }
                     break;
                 case Message.UPDATE_LEADERBOARD:
-                    if (gameFrame != null) {
-                        gameFrame.updateLeaderboard((List<User>) message.get("leaderboard"));
+                    // Update leaderboard in lobby if visible
+                    if (lobbyFrame != null && lobbyFrame.isVisible()) {
+                        lobbyFrame.updateLeaderboard((List<User>) message.get("leaderboard"));
                     }
                     break;
             }
@@ -202,42 +237,6 @@ public class GameClient {
             connection.sendMessage(powerupMsg);
         } catch (IOException e) {
             System.err.println("Error sending powerup usage: " + e.getMessage());
-        }
-    }
-
-    private void handleLoginResponse(Message message) {
-        boolean success = message.getBoolean("success");
-
-        if (success) {
-            currentUser = (User) message.get("user");
-
-            // Close login frame and open game frame
-            if (loginFrame != null) {
-                loginFrame.dispose();
-            }
-
-            // Create and show the game frame
-            gameFrame = new GameFrame(this, currentUser);
-            gameFrame.setVisible(true);
-
-            // Process initial game state if available
-            int gameId = message.getInt("gameId");
-            boolean waiting = message.getBoolean("waiting");
-            gameFrame.setGameId(gameId);
-
-            // Update leaderboard
-            List<User> leaderboard = (List<User>) message.get("leaderboard");
-            gameFrame.updateLeaderboard(leaderboard);
-
-            if (waiting) {
-                gameFrame.showWaitingScreen();
-            }
-        } else {
-            // Show error message
-            String error = message.getString("error");
-            if (loginFrame != null) {
-                loginFrame.showError(error);
-            }
         }
     }
 

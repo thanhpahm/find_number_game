@@ -29,6 +29,7 @@ public class GameFrame extends JFrame {
     private final Map<Integer, Integer> foundNumbers = new ConcurrentHashMap<>(); // number -> player color
     private final Map<Integer, String> players = new HashMap<>(); // player ID -> username
     private final Map<Integer, Integer> playerColors = new HashMap<>(); // player ID -> color
+    private final Map<Integer, Point> numberPositions = new HashMap<>(); // number -> grid position
     private int powerupsAvailable = 0;
 
     // UI Components
@@ -43,8 +44,6 @@ public class GameFrame extends JFrame {
     private JButton startButton;
     private JButton priorityButton;
     private JButton blockButton;
-    private JTable leaderboardTable;
-    private DefaultTableModel leaderboardModel;
     private JButton[][] numberButtons;
 
     // Game configuration
@@ -64,7 +63,7 @@ public class GameFrame extends JFrame {
 
         setTitle("Find the Number - " + currentUser.getUsername());
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(1000, 700);
+        setSize(800, 600);
         setLocationRelativeTo(null);
 
         initializeComponents();
@@ -130,29 +129,9 @@ public class GameFrame extends JFrame {
         gridPanel = new JPanel();
         // Grid will be created when the game starts
 
-        // Right panel with leaderboard
-        JPanel rightPanel = new JPanel(new BorderLayout());
-        rightPanel.setBorder(new TitledBorder("Leaderboard"));
-
-        // Create leaderboard table
-        String[] columnNames = { "Player", "W/L Ratio", "Score" };
-        leaderboardModel = new DefaultTableModel(columnNames, 0) {
-            @Override
-            public boolean isCellEditable(int row, int column) {
-                return false;
-            }
-        };
-
-        leaderboardTable = new JTable(leaderboardModel);
-        JScrollPane scrollPane = new JScrollPane(leaderboardTable);
-        scrollPane.setPreferredSize(new Dimension(200, 0));
-
-        rightPanel.add(scrollPane, BorderLayout.CENTER);
-
         // Add all panels to main game panel
         panel.add(topPanel, BorderLayout.NORTH);
         panel.add(gridPanel, BorderLayout.CENTER);
-        panel.add(rightPanel, BorderLayout.EAST);
 
         // Set up action listeners
         priorityButton.addActionListener(e -> usePowerup("PRIORITY"));
@@ -242,8 +221,8 @@ public class GameFrame extends JFrame {
             mainPanel.removeAll();
             mainPanel.add(gamePanel, BorderLayout.CENTER);
 
-            // Create grid
-            createNumberGrid(rows, cols);
+            // Create grid using the start game message
+            createNumberGrid(rows, cols, message);
 
             // Update UI
             statusLabel.setText("Game Status: Active");
@@ -261,16 +240,21 @@ public class GameFrame extends JFrame {
         });
     }
 
-    private void createNumberGrid(int rows, int cols) {
+    private void createNumberGrid(int rows, int cols, Message message) {
         gridPanel.removeAll();
         gridPanel.setLayout(new GridLayout(rows, cols, 2, 2));
 
         numberButtons = new JButton[rows][cols];
 
+        // Get the shuffled numbers from the server's message
+        @SuppressWarnings("unchecked")
+        List<Integer> numbers = (List<Integer>) message.get("shuffledNumbers");
+
+        int numberIndex = 0;
         for (int i = 0; i < rows; i++) {
             for (int j = 0; j < cols; j++) {
-                final int number = i * cols + j + 1;
-                if (number <= gridSize) {
+                if (numberIndex < numbers.size()) {
+                    final int number = numbers.get(numberIndex++);
                     JButton button = new JButton(String.valueOf(number));
                     button.setFont(new Font("Arial", Font.BOLD, 14));
                     button.setPreferredSize(new Dimension(60, 60));
@@ -278,6 +262,9 @@ public class GameFrame extends JFrame {
 
                     numberButtons[i][j] = button;
                     gridPanel.add(button);
+
+                    // Store the position of the number
+                    numberPositions.put(number, new Point(i, j));
                 } else {
                     // Add empty button if grid isn't a perfect square
                     JButton emptyButton = new JButton("");
@@ -341,19 +328,21 @@ public class GameFrame extends JFrame {
             // Update UI
             targetLabel.setText("Find Number: " + targetNumber);
 
-            // Update number button
-            int buttonRow = (number - 1) / cols;
-            int buttonCol = (number - 1) % cols;
+            // Get the correct button position from our stored positions
+            Point pos = numberPositions.get(number);
+            if (pos != null) {
+                JButton button = numberButtons[pos.x][pos.y];
+                // Create an opaque color from the RGB value
+                Color playerColor = new Color(playerColors.get(playerId), true);
+                button.setBackground(playerColor);
+                button.setEnabled(false);
 
-            JButton button = numberButtons[buttonRow][buttonCol];
-            button.setBackground(new Color(playerColors.get(playerId)));
-            button.setEnabled(false);
-
-            // Update score if current player found the number
-            if (playerId == currentUser.getId()) {
-                int currentScore = Integer.parseInt(
-                        scoreLabel.getText().substring(scoreLabel.getText().lastIndexOf(" ") + 1));
-                scoreLabel.setText("Your Score: " + (currentScore + 1));
+                // Update score if current player found the number
+                if (playerId == currentUser.getId()) {
+                    int currentScore = Integer.parseInt(
+                            scoreLabel.getText().substring(scoreLabel.getText().lastIndexOf(" ") + 1));
+                    scoreLabel.setText("Your Score: " + (currentScore + 1));
+                }
             }
         });
     }
@@ -361,19 +350,19 @@ public class GameFrame extends JFrame {
     public void handleIncorrectNumber(int number) {
         // Visual feedback for incorrect number
         SwingUtilities.invokeLater(() -> {
-            int buttonRow = (number - 1) / cols;
-            int buttonCol = (number - 1) % cols;
+            Point pos = numberPositions.get(number);
+            if (pos != null) {
+                final JButton button = numberButtons[pos.x][pos.y];
+                final Color originalColor = button.getBackground();
 
-            final JButton button = numberButtons[buttonRow][buttonCol];
-            final Color originalColor = button.getBackground();
+                button.setBackground(Color.ORANGE);
 
-            button.setBackground(Color.ORANGE);
-
-            // Reset color after a brief delay
-            new Timer(300, e -> {
-                button.setBackground(originalColor);
-                ((Timer) e.getSource()).stop();
-            }).start();
+                // Reset color after a brief delay
+                new Timer(300, e -> {
+                    button.setBackground(originalColor);
+                    ((Timer) e.getSource()).stop();
+                }).start();
+            }
         });
     }
 
@@ -424,23 +413,26 @@ public class GameFrame extends JFrame {
                 int numberToBlock = gridSize / 5;
                 long endTime = System.currentTimeMillis() + durationMs;
 
-                for (int i = 0; i < numberToBlock; i++) {
-                    int randomIndex = (int) (Math.random() * gridSize);
-
-                    // Skip if already found
-                    if (foundNumbers.containsKey(randomIndex + 1)) {
-                        continue;
+                // Get list of available numbers
+                java.util.List<Integer> availableNumbers = new java.util.ArrayList<>();
+                for (int num = 1; num <= gridSize; num++) {
+                    if (!foundNumbers.containsKey(num)) {
+                        availableNumbers.add(num);
                     }
+                }
 
-                    blockedNumbers.put(randomIndex, endTime);
+                // Randomly select numbers to block
+                java.util.Collections.shuffle(availableNumbers);
+                for (int i = 0; i < Math.min(numberToBlock, availableNumbers.size()); i++) {
+                    int number = availableNumbers.get(i);
+                    blockedNumbers.put(number - 1, endTime);
 
-                    // Update UI
-                    int row = randomIndex / cols;
-                    int col = randomIndex % cols;
-
-                    if (row < numberButtons.length && col < numberButtons[row].length) {
-                        JButton button = numberButtons[row][col];
-                        button.setBackground(new Color(playerColors.get(playerId)));
+                    // Get the correct position from our stored positions
+                    Point pos = numberPositions.get(number);
+                    if (pos != null) {
+                        JButton button = numberButtons[pos.x][pos.y];
+                        Color playerColor = new Color(playerColors.get(playerId), true);
+                        button.setBackground(playerColor);
                         button.setEnabled(false);
                     }
                 }
@@ -486,15 +478,13 @@ public class GameFrame extends JFrame {
         for (Map.Entry<Integer, Long> entry : blockedNumbers.entrySet()) {
             if (entry.getValue() < now) {
                 // Unblock this number
-                int index = entry.getKey();
-                blockedNumbers.remove(index);
+                int number = entry.getKey() + 1; // Convert back to actual number
+                blockedNumbers.remove(entry.getKey());
 
-                // Update UI
-                int row = index / cols;
-                int col = index % cols;
-
-                if (row < numberButtons.length && col < numberButtons[row].length) {
-                    JButton button = numberButtons[row][col];
+                // Get the correct position from our stored positions
+                Point pos = numberPositions.get(number);
+                if (pos != null) {
+                    JButton button = numberButtons[pos.x][pos.y];
                     button.setBackground(null);
                     button.setEnabled(true);
                 }
@@ -550,22 +540,6 @@ public class GameFrame extends JFrame {
                         numberButtons[i][j].setEnabled(false);
                     }
                 }
-            }
-        });
-    }
-
-    public void updateLeaderboard(List<User> leaderboard) {
-        SwingUtilities.invokeLater(() -> {
-            // Clear current table
-            while (leaderboardModel.getRowCount() > 0) {
-                leaderboardModel.removeRow(0);
-            }
-
-            // Add users to leaderboard
-            for (User user : leaderboard) {
-                String winRatio = String.format("%.2f", user.getWinRate());
-                Object[] row = { user.getUsername(), winRatio, user.getTotalScore() };
-                leaderboardModel.addRow(row);
             }
         });
     }
