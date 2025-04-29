@@ -94,16 +94,22 @@ public class ClientHandler implements Runnable {
 
         Message response = new Message(Message.LOGIN_RESPONSE);
         if (authenticatedUser != null) {
-            this.user = authenticatedUser;
-            response.put("success", true);
-            response.put("user", authenticatedUser);
+            // Prevent concurrent logins for the same user
+            if (server.isUserLoggedIn(username)) {
+                response.put("success", false);
+                response.put("error", "User already logged in from another client.");
+            } else {
+                this.user = authenticatedUser;
+                response.put("success", true);
+                response.put("user", authenticatedUser);
 
-            // Send leaderboard data
-            List<User> leaderboard = server.getDatabaseManager().getLeaderboard();
-            response.put("leaderboard", leaderboard);
+                // Send leaderboard data
+                List<User> leaderboard = server.getDatabaseManager().getLeaderboard();
+                response.put("leaderboard", leaderboard);
 
-            // Remove automatic game joining - players will join only when clicking "Find
-            // Game"
+                // Remove automatic game joining - players will join only when clicking "Find
+                // Game"
+            }
         } else {
             response.put("success", false);
             response.put("error", "Invalid username or password.");

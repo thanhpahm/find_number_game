@@ -107,6 +107,11 @@ public class GameServer {
         clients.remove(client);
     }
 
+    // New method to get currently connected clients
+    public List<ClientHandler> getClients() {
+        return clients;
+    }
+
     public DatabaseManager getDatabaseManager() {
         return dbManager;
     }
@@ -152,5 +157,15 @@ public class GameServer {
 
         GameServer server = new GameServer(port);
         server.start();
+    }
+
+    // Checks if a user is already logged in
+    public boolean isUserLoggedIn(String username) {
+        for (ClientHandler client : clients) {
+            if (client.getUser() != null && client.getUser().getUsername().equals(username)) {
+                return true;
+            }
+        }
+        return false;
     }
 }
