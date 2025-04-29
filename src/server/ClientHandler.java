@@ -75,6 +75,11 @@ public class ClientHandler implements Runnable {
             case Message.USE_POWERUP:
                 handlePowerup(message);
                 break;
+            case Message.DECLINE_GAME:
+                if (currentGame != null) {
+                    currentGame.handleDecline(user.getId());
+                }
+                break;
             default:
                 System.err.println("Unknown message type: " + messageType);
                 break;

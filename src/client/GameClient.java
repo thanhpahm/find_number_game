@@ -126,6 +126,20 @@ public class GameClient {
                 case Message.LOGIN_RESPONSE:
                     handleLoginResponse(message);
                     break;
+                case Message.START_CANCELED:
+                    if (gameFrame != null) {
+                        gameFrame.dispose();
+                        gameFrame = null;
+                    }
+                    if (lobbyFrame != null) {
+                        lobbyFrame.resetFindGameButton();
+                        lobbyFrame.setVisible(true);
+                    }
+                    JOptionPane.showMessageDialog(lobbyFrame,
+                            "Game start canceled. Returning to lobby.",
+                            "Info",
+                            JOptionPane.INFORMATION_MESSAGE);
+                    break;
                 case "PLAYER_JOINED":
                     // Show waiting UI upon first player join
                     if (gameFrame == null) {
@@ -273,6 +287,15 @@ public class GameClient {
             connection.sendMessage(findGameMsg);
         } catch (IOException e) {
             System.err.println("Error sending find game request: " + e.getMessage());
+        }
+    }
+
+    public void sendDeclineGame() {
+        try {
+            Message declineMsg = new Message(Message.DECLINE_GAME);
+            connection.sendMessage(declineMsg);
+        } catch (IOException e) {
+            System.err.println("Error sending decline game request: " + e.getMessage());
         }
     }
 

@@ -420,4 +420,19 @@ public class Game {
             endGame();
         }
     }
+
+    public synchronized void handleDecline(int playerId) {
+        if (players.containsKey(playerId) && !isActive) {
+            // Notify all players that start is canceled
+            Message cancelMsg = new Message(Message.START_CANCELED);
+            broadcastToAllPlayers(cancelMsg);
+            // Clear game assignments for handlers
+            for (ClientHandler client : players.values()) {
+                client.setCurrentGame(null);
+            }
+            // Reset game state
+            players.clear();
+            confirmedPlayers.clear();
+        }
+    }
 }

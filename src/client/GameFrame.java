@@ -195,6 +195,8 @@ public class GameFrame extends JFrame {
                     startButton.setText("Waiting for game to start...");
                     startButton.setEnabled(false);
                     client.sendStartGame();
+                } else if (choice == JOptionPane.NO_OPTION) {
+                    client.sendDeclineGame();
                 }
             }
         });

@@ -23,6 +23,8 @@ public class Message implements Serializable {
     public static final String POWERUP_EFFECT = "POWERUP_EFFECT";
     public static final String UPDATE_LEADERBOARD = "UPDATE_LEADERBOARD";
     public static final String ERROR = "ERROR";
+    public static final String DECLINE_GAME = "DECLINE_GAME";
+    public static final String START_CANCELED = "START_CANCELED";
 
     private String type;
     private Map<String, Object> data;
