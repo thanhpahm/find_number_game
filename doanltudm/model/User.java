@@ -260,10 +260,6 @@ public class User implements Serializable {
         return new HashSet<>(achievements);
     }
 
-    public void addAchievement(String achievement) {
-        achievements.add(achievement);
-    }
-
     public int getConsecutiveWins() {
         return consecutiveWins;
     }

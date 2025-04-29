@@ -35,10 +35,12 @@ public class Game {
     private final AtomicInteger playerCount = new AtomicInteger(0);
     private final int maxPlayers;
     private final DatabaseManager dbManager;
+    private final Set<Integer> confirmedPlayers = new HashSet<>(); // Track which players have confirmed
 
     // Power-ups tracking
     private final Map<Integer, Long> priorityPowerupEndTime = new ConcurrentHashMap<>(); // userId -> end time
     private final Map<Integer, Integer> luckyNumberCounts = new ConcurrentHashMap<>(); // userId -> count
+    private final Map<Integer, Integer> initialPowerups = new ConcurrentHashMap<>(); // userId -> initial powerup count
 
     public Game(int gameId, DatabaseManager dbManager) {
         this(gameId, DEFAULT_GRID_SIZE, DEFAULT_GAME_DURATION_SECONDS, 3, dbManager); // Default: 3 players max
@@ -76,26 +78,23 @@ public class Game {
         // Notify all players (including the new one) about the join
         notifyPlayersOfJoin(client.getUser());
 
-        // Automatically start the game if enough players have joined and it's not
-        // active
-        if (players.size() >= 2 && !isActive) {
-            System.out.println("Enough players joined. Starting game " + gameId); // Added log
-            startGame();
-        }
-
+        // Don't auto-start, wait for player confirmation
         return true;
     }
 
-    public synchronized void removePlayer(int playerId) {
-        players.remove(playerId);
-        if (players.isEmpty() && isActive) {
-            endGame();
+    public synchronized void handleStartConfirmation(int playerId) {
+        if (!isActive && players.containsKey(playerId)) {
+            confirmedPlayers.add(playerId);
+
+            // Check if all players have confirmed
+            if (confirmedPlayers.size() >= 2 && confirmedPlayers.size() == players.size()) {
+                startGame();
+            }
         }
     }
 
     public synchronized void startGame() {
-        if (players.size() < 2) {
-            // Need at least 2 players
+        if (players.size() < 2 || isActive) {
             return;
         }
 
@@ -112,13 +111,20 @@ public class Game {
         // Pick the first target number
         generateNextTarget();
 
+        // Initialize each player with powerups
+        final int INITIAL_POWERUP_COUNT = 3;
+        for (int playerId : players.keySet()) {
+            initialPowerups.put(playerId, INITIAL_POWERUP_COUNT);
+        }
+
         // Send start game message to all players
         Message startMessage = new Message(Message.START_GAME);
         startMessage.put("gridSize", gridSize);
         startMessage.put("duration", gameDurationSeconds);
         startMessage.put("targetNumber", targetNumber);
         startMessage.put("players", getPlayerInfo());
-        startMessage.put("shuffledNumbers", numbers); // Send the shuffled numbers to clients
+        startMessage.put("shuffledNumbers", numbers);
+        startMessage.put("initialPowerups", INITIAL_POWERUP_COUNT);
 
         broadcastToAllPlayers(startMessage);
 
@@ -221,11 +227,30 @@ public class Game {
         if (!isActive)
             return;
 
+        // First check if player has initial powerups available
+        int availablePowerups = initialPowerups.getOrDefault(playerId, 0);
+        int availableLuckyNumbers = luckyNumberCounts.getOrDefault(playerId, 0);
+
         switch (powerupType) {
             case "PRIORITY":
-                if (luckyNumberCounts.getOrDefault(playerId, 0) > 0) {
-                    // Use one lucky number count
-                    luckyNumberCounts.put(playerId, luckyNumberCounts.get(playerId) - 1);
+                // Use initial powerup first, then lucky numbers if available
+                if (availablePowerups > 0) {
+                    // Use one initial powerup
+                    initialPowerups.put(playerId, availablePowerups - 1);
+
+                    // Give player priority for 3 seconds
+                    priorityPowerupEndTime.put(playerId, System.currentTimeMillis() + 3000);
+
+                    // Notify all players
+                    Message powerupMessage = new Message(Message.POWERUP_EFFECT);
+                    powerupMessage.put("type", "PRIORITY");
+                    powerupMessage.put("playerId", playerId);
+                    powerupMessage.put("durationMs", 3000);
+
+                    broadcastToAllPlayers(powerupMessage);
+                } else if (availableLuckyNumbers > 0) {
+                    // Fall back to lucky numbers if no initial powerups left
+                    luckyNumberCounts.put(playerId, availableLuckyNumbers - 1);
 
                     // Give player priority for 3 seconds
                     priorityPowerupEndTime.put(playerId, System.currentTimeMillis() + 3000);
@@ -239,10 +264,23 @@ public class Game {
                     broadcastToAllPlayers(powerupMessage);
                 }
                 break;
+
             case "BLOCK_NUMBERS":
-                if (luckyNumberCounts.getOrDefault(playerId, 0) > 0) {
-                    // Use one lucky number count
-                    luckyNumberCounts.put(playerId, luckyNumberCounts.get(playerId) - 1);
+                // Use initial powerup first, then lucky numbers if available
+                if (availablePowerups > 0) {
+                    // Use one initial powerup
+                    initialPowerups.put(playerId, availablePowerups - 1);
+
+                    // Notify all players to block numbers from other players
+                    Message powerupMessage = new Message(Message.POWERUP_EFFECT);
+                    powerupMessage.put("type", "BLOCK_NUMBERS");
+                    powerupMessage.put("playerId", playerId);
+                    powerupMessage.put("durationMs", 3000);
+
+                    broadcastToAllPlayers(powerupMessage);
+                } else if (availableLuckyNumbers > 0) {
+                    // Fall back to lucky numbers if no initial powerups left
+                    luckyNumberCounts.put(playerId, availableLuckyNumbers - 1);
 
                     // Notify all players to block numbers from other players
                     Message powerupMessage = new Message(Message.POWERUP_EFFECT);
@@ -370,5 +408,16 @@ public class Game {
 
     public int getMaxPlayers() {
         return maxPlayers;
+    }
+
+    /**
+     * Remove a player from the game
+     */
+    public synchronized void removePlayer(int playerId) {
+        players.remove(playerId);
+        confirmedPlayers.remove(playerId);
+        if (players.isEmpty() && isActive) {
+            endGame();
+        }
     }
 }

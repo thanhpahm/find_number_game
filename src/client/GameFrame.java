@@ -20,6 +20,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public class GameFrame extends JFrame {
     private final GameClient client;
     private final User currentUser;
+    // flag to ensure start confirmation dialog is only shown once
+    private boolean confirmationRequested = false;
 
     // Game state
     private int targetNumber;
@@ -29,6 +31,10 @@ public class GameFrame extends JFrame {
     private final Map<Integer, Integer> playerColors = new HashMap<>(); // player ID -> color
     private final Map<Integer, Point> numberPositions = new HashMap<>(); // number -> grid position
     private int powerupsAvailable = 0;
+
+    // Track recently clicked numbers to prevent double clicks
+    private final Map<Integer, Long> recentlyClicked = new ConcurrentHashMap<>(); // number -> click timestamp
+    private static final int CLICK_DEBOUNCE_MS = 500; // Prevent double clicks within 500ms
 
     // UI Components
     private JPanel mainPanel;
@@ -175,7 +181,23 @@ public class GameFrame extends JFrame {
 
         startButton = new JButton("Start Game");
         startButton.setEnabled(false);
-        startButton.addActionListener(e -> client.sendStartGame());
+        startButton.addActionListener(e -> {
+            if (!confirmationRequested) {
+                int choice = JOptionPane.showConfirmDialog(
+                        GameFrame.this,
+                        "Are you ready to start the game?",
+                        "Start Game Confirmation",
+                        JOptionPane.YES_NO_OPTION,
+                        JOptionPane.QUESTION_MESSAGE);
+
+                if (choice == JOptionPane.YES_OPTION) {
+                    confirmationRequested = true;
+                    startButton.setText("Waiting for game to start...");
+                    startButton.setEnabled(false);
+                    client.sendStartGame();
+                }
+            }
+        });
 
         JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER));
         buttonPanel.add(startButton);
@@ -188,6 +210,8 @@ public class GameFrame extends JFrame {
 
     public void showWaitingScreen() {
         SwingUtilities.invokeLater(() -> {
+            // Reset confirmation flag when showing waiting screen again
+            confirmationRequested = false;
             mainPanel.removeAll();
             mainPanel.add(waitingPanel, BorderLayout.CENTER);
             mainPanel.revalidate();
@@ -225,6 +249,15 @@ public class GameFrame extends JFrame {
         remainingSeconds = message.getInt("duration");
         targetNumber = message.getInt("targetNumber");
 
+        // Initialize powerups for the player (default is 3 of each type)
+        // Check if initialPowerups exists in the message, otherwise default to 3
+        try {
+            powerupsAvailable = message.getInt("initialPowerups");
+        } catch (Exception e) {
+            // If initialPowerups is not in the message or there's a casting error
+            powerupsAvailable = 3;
+        }
+
         // Set grid dimensions
         rows = (int) Math.sqrt(gridSize);
         cols = gridSize / rows;
@@ -255,6 +288,9 @@ public class GameFrame extends JFrame {
             statusLabel.setText("Game Status: Active");
             targetLabel.setText("Find Number: " + targetNumber);
             formatTimeLabel(remainingSeconds);
+
+            // Update powerup buttons with initial count
+            updatePowerups(powerupsAvailable);
 
             mainPanel.revalidate();
             mainPanel.repaint();
@@ -312,6 +348,15 @@ public class GameFrame extends JFrame {
                 blockedNumbers.get(buttonIndex) > System.currentTimeMillis()) {
             return; // Number is still blocked
         }
+
+        // Adding a debounce mechanism to prevent double clicks from sending multiple
+        // requests
+        long currentTime = System.currentTimeMillis();
+        if (recentlyClicked.containsKey(number) &&
+                (currentTime - recentlyClicked.get(number)) < CLICK_DEBOUNCE_MS) {
+            return; // Click ignored due to debounce
+        }
+        recentlyClicked.put(number, currentTime);
 
         // Send number found message to server
         client.sendNumberFound(number);
@@ -434,40 +479,29 @@ public class GameFrame extends JFrame {
         int durationMs = message.getInt("durationMs");
 
         if ("BLOCK_NUMBERS".equals(type) && playerId != currentUser.getId()) {
-            // Other player blocked our numbers
             SwingUtilities.invokeLater(() -> {
-                // Block a random 20% of the grid
-                int numberToBlock = gridSize / 5;
                 long endTime = System.currentTimeMillis() + durationMs;
-
-                // Get list of available numbers
                 java.util.List<Integer> availableNumbers = new java.util.ArrayList<>();
                 for (int num = 1; num <= gridSize; num++) {
                     if (!foundNumbers.containsKey(num)) {
                         availableNumbers.add(num);
                     }
                 }
-
-                // Randomly select numbers to block
-                java.util.Collections.shuffle(availableNumbers);
-                for (int i = 0; i < Math.min(numberToBlock, availableNumbers.size()); i++) {
-                    int number = availableNumbers.get(i);
+                // Block all available numbers
+                for (Integer number : availableNumbers) {
                     blockedNumbers.put(number - 1, endTime);
-
-                    // Get the correct position from our stored positions
                     Point pos = numberPositions.get(number);
                     if (pos != null) {
                         JButton button = numberButtons[pos.x][pos.y];
-                        Color playerColor = new Color(playerColors.get(playerId), true);
-                        button.setBackground(playerColor);
-                        button.setEnabled(false);
+                        button.setVisible(false);
                     }
                 }
 
-                // Show notification
-                statusLabel.setText("Game Status: Numbers Blocked!");
+                statusLabel.setText("Game Status: All Numbers Blocked!");
+                // Ensure UI updates reflect hidden buttons
+                gridPanel.revalidate();
+                gridPanel.repaint();
 
-                // Reset status after the duration
                 new Timer(durationMs, e -> {
                     statusLabel.setText("Game Status: Active");
                     ((Timer) e.getSource()).stop();
@@ -504,18 +538,15 @@ public class GameFrame extends JFrame {
 
         for (Map.Entry<Integer, Long> entry : blockedNumbers.entrySet()) {
             if (entry.getValue() < now) {
-                // Unblock this number
-                int number = entry.getKey() + 1; // Convert back to actual number
+                int number = entry.getKey() + 1;
                 blockedNumbers.remove(entry.getKey());
-
-                // Get the correct position from our stored positions
                 Point pos = numberPositions.get(number);
                 if (pos != null) {
                     JButton button = numberButtons[pos.x][pos.y];
-                    button.setBackground(null);
-                    button.setEnabled(true);
+                    // Restore the button visibility and text
+                    button.setVisible(true);
+                    button.setText(String.valueOf(number));
                 }
-
                 update = true;
             }
         }

@@ -4,6 +4,7 @@ import javax.swing.*;
 import javax.swing.border.*;
 import java.awt.*;
 import java.util.*;
+import java.util.List;
 import shared.ScoreTracker.PlayerStats;
 
 public class PlayerProfileFrame extends JFrame {
@@ -132,7 +133,7 @@ public class PlayerProfileFrame extends JFrame {
     public void updateProfile(Map<String, Object> data) {
         PlayerStats stats = (PlayerStats) data.get("stats");
         Set<String> achievements = (Set<String>) data.get("achievements");
-        List<Map<String, Object>> recentGames = (List<Map<String, Object>>) data.get("recentGames");
+        java.util.List<Map<String, Object>> recentGames = (java.util.List<Map<String, Object>>) data.get("recentGames");
         int rank = (Integer) data.get("rank");
         double rankProgress = (Double) data.get("rankProgress");
 

@@ -64,8 +64,9 @@ public class ClientHandler implements Runnable {
                 handleFindGame();
                 break;
             case Message.START_GAME:
-                if (currentGame != null && !currentGame.isActive() && user != null) {
-                    currentGame.startGame();
+                // When a player confirms ready to start, notify the game
+                if (currentGame != null) {
+                    currentGame.handleStartConfirmation(user.getId());
                 }
                 break;
             case Message.NUMBER_FOUND:
@@ -75,7 +76,8 @@ public class ClientHandler implements Runnable {
                 handlePowerup(message);
                 break;
             default:
-                System.out.println("Unknown message type: " + messageType);
+                System.err.println("Unknown message type: " + messageType);
+                break;
         }
     }
 

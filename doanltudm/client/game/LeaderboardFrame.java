@@ -1,10 +1,13 @@
 package client.game;
 
 import javax.swing.*;
+import javax.swing.Timer;
 import javax.swing.border.*;
 import javax.swing.table.*;
 import java.awt.*;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+
 
 public class LeaderboardFrame extends JFrame {
     private final GameClient client;
@@ -12,6 +15,10 @@ public class LeaderboardFrame extends JFrame {
     private JPanel achievementsPanel;
     private JComboBox<String> timeFilterComboBox;
     private Timer refreshTimer;
+    private JLabel totalGamesLabel;
+    private JLabel activePlayersLabel;
+    private JLabel avgDurationLabel;
+
 
     public LeaderboardFrame(GameClient client) {
         this.client = client;
@@ -93,16 +100,23 @@ public class LeaderboardFrame extends JFrame {
 
     private JPanel createStatsPanel() {
         JPanel panel = new JPanel(new BorderLayout());
-
-        // Stats at the top
-        JPanel statsPanel = new JPanel(new GridLayout(0, 2, 5, 5));
+        JPanel statsPanel = new JPanel();
         statsPanel.setBorder(BorderFactory.createTitledBorder("Global Statistics"));
 
         // These will be populated when data is loaded
         statsPanel.add(new JLabel("Total Games Played:"));
-        statsPanel.add(new JLabel("0"));
+        totalGamesLabel = new JLabel("0");
+        statsPanel.add(totalGamesLabel);
+
         statsPanel.add(new JLabel("Active Players:"));
-        statsPanel.add(new JLabel("0"));
+        activePlayersLabel = new JLabel("0");
+        statsPanel.add(activePlayersLabel);
+
+        statsPanel.add(new JLabel("Average Game Duration:"));
+        avgDurationLabel = new JLabel("0:00");
+        statsPanel.add(avgDurationLabel);
+
+        panel.add(statsPanel, BorderLayout.NORTH);
         statsPanel.add(new JLabel("Average Game Duration:"));
         statsPanel.add(new JLabel("0:00"));
 
@@ -137,12 +151,12 @@ public class LeaderboardFrame extends JFrame {
             int rank = 1;
             for (Map<String, Object> entry : leaderboardData) {
                 model.addRow(new Object[] {
-                        rank++,
-                        entry.get("username"),
-                        entry.get("score"),
-                        String.format("%.1f%%", (double) entry.get("winRate") * 100),
-                        entry.get("gamesWon"),
-                        entry.get("luckyNumbers")
+                    rank++,
+                    entry.get("username"),
+                    entry.get("score"),
+                    entry.get("winRate"),
+                    entry.get("gamesWon"),
+                    entry.get("luckyNumbers")
                 });
             }
         });
@@ -150,30 +164,19 @@ public class LeaderboardFrame extends JFrame {
 
     public void updateGlobalStats(Map<String, Object> stats) {
         SwingUtilities.invokeLater(() -> {
-            Component[] components = ((JPanel) getContentPane().getComponent(1))
-                    .getComponent(1).getComponents();
-
-            for (Component c : components) {
-                if (c instanceof JPanel && c.getName().equals("statsPanel")) {
-                    JPanel statsPanel = (JPanel) c;
-                    updateStatLabel(statsPanel, "Total Games Played:", stats.get("totalGames").toString());
-                    updateStatLabel(statsPanel, "Active Players:", stats.get("activePlayers").toString());
-                    updateStatLabel(statsPanel, "Average Game Duration:",
-                            formatDuration((Long) stats.get("avgGameDuration")));
-                }
+            if (totalGamesLabel != null) {
+                totalGamesLabel.setText(stats.get("totalGames").toString());
+            }
+            if (activePlayersLabel != null) {
+                activePlayersLabel.setText(stats.get("activePlayers").toString());
+            }
+            if (avgDurationLabel != null) {
+                avgDurationLabel.setText(formatDuration((Long) stats.get("avgGameDuration")));
             }
         });
     }
 
-    private void updateStatLabel(JPanel panel, String labelText, String value) {
-        for (int i = 0; i < panel.getComponentCount(); i++) {
-            Component c = panel.getComponent(i);
-            if (c instanceof JLabel && ((JLabel) c).getText().equals(labelText)) {
-                ((JLabel) panel.getComponent(i + 1)).setText(value);
-                break;
-            }
-        }
-    }
+    // The updateStatLabel method is no longer needed and can be removed.
 
     public void updateRecentAchievements(List<Map<String, Object>> achievements) {
         SwingUtilities.invokeLater(() -> {

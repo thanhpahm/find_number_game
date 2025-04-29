@@ -127,18 +127,27 @@ public class GameClient {
                     handleLoginResponse(message);
                     break;
                 case "PLAYER_JOINED":
-                    if (gameFrame != null) {
-                        gameFrame.updateWaitingStatus(message);
+                    // Show waiting UI upon first player join
+                    if (gameFrame == null) {
+                        gameFrame = new GameFrame(this, currentUser);
+                        if (lobbyFrame != null) {
+                            lobbyFrame.setVisible(false);
+                        }
+                        gameFrame.showWaitingScreen();
+                        gameFrame.setVisible(true);
                     }
+                    gameFrame.updateWaitingStatus(message);
                     break;
                 case Message.START_GAME:
-                    // Create the game frame when the START_GAME message is received
-                    gameFrame = new GameFrame(this, currentUser);
+                    // Hide lobby and start the game on the existing GameFrame
                     if (lobbyFrame != null) {
-                        lobbyFrame.setVisible(false); // Hide lobby frame
+                        lobbyFrame.setVisible(false);
+                    }
+                    if (gameFrame == null) {
+                        gameFrame = new GameFrame(this, currentUser);
+                        gameFrame.setVisible(true);
                     }
                     gameFrame.startGame(message);
-                    gameFrame.setVisible(true);
                     break;
                 case Message.NUMBER_FOUND:
                     if (gameFrame != null) {
